@@ -150,19 +150,19 @@
 <div id="toast" class="toast hidden"></div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import {
   getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, runTransaction, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
-// ============ FIREBASE — kendi projenin bilgilerini buraya yapıştır ============
+// ============ FIREBASE ============
 const FIREBASE_CONFIG = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyBMxdqMnKbr6F0pezyDDOvkC-r7_q_j_ow",
+  authDomain: "commandline-c5e8e.firebaseapp.com",
+  projectId: "commandline-c5e8e",
+  storageBucket: "commandline-c5e8e.firebasestorage.app",
+  messagingSenderId: "210861958832",
+  appId: "1:210861958832:web:324aee7021bda00fa23d75",
 };
 const fbApp = initializeApp(FIREBASE_CONFIG);
 const db = getFirestore(fbApp);
