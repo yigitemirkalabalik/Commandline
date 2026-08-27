@@ -84,25 +84,25 @@
 
   .unit{
     position:relative;width:76%;height:76%;display:flex;align-items:center;justify-content:center;
-    font-size:13px;font-weight:900;color:#fff;z-index:2;
-    filter:drop-shadow(0 2px 3px rgba(0,0,0,.6));
+    color:#fff;z-index:2;
+    box-shadow:0 2px 3px rgba(0,0,0,.6);
   }
   .unit.soldier{
     clip-path:polygon(50% 2%, 95% 35%, 78% 98%, 22% 98%, 5% 35%);
     background:linear-gradient(160deg, var(--u-light,#5aa8d6), var(--u-dark,#2a6a8f));
   }
   .unit.commander{
-    width:84%;height:84%;font-size:14px;
+    width:84%;height:84%;
     clip-path:polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
     background:linear-gradient(160deg, var(--u-light,#5aa8d6), var(--u-dark,#2a6a8f));
-    filter:drop-shadow(0 2px 4px rgba(0,0,0,.7)) drop-shadow(0 0 6px var(--u-light,#5aa8d6));
+    box-shadow:0 2px 4px rgba(0,0,0,.7), 0 0 6px var(--u-light,#5aa8d6);
   }
   .unit.tank{
-    width:90%;height:78%;font-size:11px;border-radius:3px;
+    width:90%;height:78%;border-radius:3px;
     clip-path:polygon(10% 20%, 90% 20%, 100% 50%, 90% 80%, 10% 80%, 0% 50%);
     background:linear-gradient(160deg,#8a8f82,#4b4f45);
   }
-  .hp-wrap{position:absolute;bottom:2px;left:12%;right:12%;height:4px;background:rgba(0,0,0,.6);border-radius:2px;z-index:3;overflow:hidden;}
+  .hp-wrap{position:absolute;top:3px;left:10%;right:10%;height:4px;background:rgba(0,0,0,.7);border-radius:2px;z-index:3;overflow:hidden;border:1px solid rgba(0,0,0,.5);}
   .hp-fill{height:100%;background:linear-gradient(90deg,#8fd14a,#c9d14a);}
   .hp-fill.low{background:linear-gradient(90deg,#d16a4a,#c9432f);}
   .shield-ring{position:absolute;inset:0;border:2px dashed var(--accent2);border-radius:50%;z-index:1;animation:pulse 1.6s ease-in-out infinite;}
@@ -153,6 +153,16 @@
     <p class="muted" id="homeMsg"></p>
   </div>
 
+  <!-- MODE SELECT -->
+  <div id="screen-mode" class="card hidden" style="text-align:center;">
+    <h2>Oyun Modu</h2>
+    <div class="row" style="justify-content:center;gap:20px;margin-top:20px;">
+      <button id="btnModeNormal" style="padding:22px 34px;font-size:15px;">🎯 Normal Oyun<br><span style="font-weight:400;font-size:11px;text-transform:none;opacity:.8;">Standart kurallarla direkt başla</span></button>
+      <button id="btnModeCustom" class="secondary" style="padding:22px 34px;font-size:15px;">⚙ Özel Oyun<br><span style="font-weight:400;font-size:11px;text-transform:none;opacity:.8;">Sayıları kendin ayarla</span></button>
+    </div>
+    <p style="margin-top:20px;"><button id="btnBackHome0" class="secondary">← Geri</button></p>
+  </div>
+
   <!-- CONFIG (host only) -->
   <div id="screen-config" class="card hidden">
     <h2>Oyun Ayarları</h2>
@@ -167,7 +177,11 @@
   <!-- LOBBY -->
   <div id="screen-lobby" class="card hidden">
     <h2>Lobi</h2>
-    <p>Oda kodu: <span class="badge" id="roomCodeDisplay"></span> — bunu rakibine gönder.</p>
+    <div style="text-align:center;margin:14px 0 20px;">
+      <div class="muted" style="text-transform:uppercase;letter-spacing:1px;font-size:11px;margin-bottom:6px;">Oda Kodu — rakibine gönder</div>
+      <div id="roomCodeDisplay" style="font-size:44px;font-weight:900;letter-spacing:10px;color:var(--accent2);text-shadow:0 0 20px rgba(217,154,58,.4);font-family:'Consolas','Courier New',monospace;"></div>
+      <button id="btnCopyCode" class="secondary" style="margin-top:8px;">📋 Kodu Kopyala</button>
+    </div>
     <div id="lobbyPlayers"></div>
     <button id="btnReady">Hazırım</button>
   </div>
@@ -220,6 +234,7 @@
 </div>
 
 <button id="btnEndGame" class="danger hidden" style="position:fixed;top:12px;right:12px;z-index:40;">⏹ Oyunu Bitir</button>
+<div style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#4a4f3a;z-index:60;">build v9</div>
 <div id="toast" class="toast hidden"></div>
 
 <script type="module">
@@ -320,17 +335,18 @@ let pendingAction = null; // 'move' | 'attack' | 'placeBarricade' | 'moveBarrica
 let deployBuffer = { units: [], barricades: [] };
 
 const $ = (id)=>document.getElementById(id);
-function show(id){ ['screen-home','screen-config','screen-lobby','screen-deploy','screen-battle','screen-gameover'].forEach(s=>$(s).classList.toggle('hidden', s!==id)); }
+function show(id){ ['screen-home','screen-mode','screen-config','screen-lobby','screen-deploy','screen-battle','screen-gameover'].forEach(s=>$(s).classList.toggle('hidden', s!==id)); }
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'), 2200); }
 
 function roomRef(code){ return doc(db, 'rooms', code); }
 
 // ---------- HOME ----------
-$('btnGoConfig').onclick = ()=>{
-  buildConfigForm();
-  show('screen-config');
-};
+$('btnGoConfig').onclick = ()=> show('screen-mode');
+$('btnBackHome0').onclick = ()=> show('screen-home');
 $('btnBackHome1').onclick = ()=> show('screen-home');
+
+$('btnModeNormal').onclick = ()=> createRoomWithConfig(Object.assign({}, DEFAULT_CONFIG));
+$('btnModeCustom').onclick = ()=>{ buildConfigForm(); show('screen-config'); };
 
 function buildConfigForm(){
   const fields = [
@@ -351,9 +367,13 @@ function buildConfigForm(){
 }
 
 $('btnCreateRoom').onclick = async ()=>{
-  const name = $('playerName').value.trim() || 'Oyuncu 1';
   const cfg = Object.assign({}, DEFAULT_CONFIG);
   Object.keys(cfg).forEach(k=>{ const inp = $('cfg_'+k); if(inp) cfg[k] = Number(inp.value) || cfg[k]; });
+  await createRoomWithConfig(cfg);
+};
+
+async function createRoomWithConfig(cfg){
+  const name = $('playerName').value.trim() || 'Oyuncu 1';
   const code = Math.random().toString(36).slice(2,6).toUpperCase();
   const initial = buildInitialRoom(cfg, name);
   await setDoc(roomRef(code), initial);
@@ -361,7 +381,7 @@ $('btnCreateRoom').onclick = async ()=>{
   localStorage.setItem('kz_last_room', code);
   localStorage.setItem('kz_last_slot_'+code, 'p1');
   subscribeRoom(code);
-};
+}
 
 $('btnJoin').onclick = async ()=>{
   const code = $('joinCode').value.trim().toUpperCase();
@@ -461,6 +481,7 @@ $('btnEndGame').onclick = async ()=>{
 
 function renderLobby(){
   $('roomCodeDisplay').textContent = ROOM_CODE;
+  $('btnCopyCode').onclick = ()=>{ navigator.clipboard.writeText(ROOM_CODE); toast('Kopyalandı: '+ROOM_CODE); };
   const p1 = ROOM.players.p1, p2 = ROOM.players.p2;
   $('lobbyPlayers').innerHTML = `
     <div class="statline"><span>${p1?p1.name:'—'} (P1)</span><span>${p1&&p1.ready?'✅ hazır':'bekleniyor'}</span></div>
@@ -470,7 +491,21 @@ function renderLobby(){
 }
 
 // ---------- BOARD RENDERING (shared by deploy/battle) ----------
+function unitLabel(u){
+  if(u.type==='commander') return 'Komutan';
+  if(u.type==='tank') return 'Tank';
+  return 'Asker';
+}
+const shellCache = new WeakMap(); // boardEl -> {key, cells}
+
 function drawBoardShell(cfg, boardEl){
+  const key = cfg.boardWidth+'x'+cfg.boardHeight;
+  const cached = shellCache.get(boardEl);
+  if(cached && cached.key===key){
+    // grid zaten kurulu — sadece önceki turun üstüne binen görselleri temizle, DOM'u yeniden kurma (performans)
+    Object.values(cached.cells).forEach(c=>{ c.innerHTML=''; c.classList.remove('fog','selected'); });
+    return cached.cells;
+  }
   boardEl.style.gridTemplateColumns = `repeat(${cfg.boardWidth}, 1fr)`;
   boardEl.style.width = 'min(100%, 620px)';
   boardEl.innerHTML='';
@@ -488,14 +523,10 @@ function drawBoardShell(cfg, boardEl){
       cells[x+'_'+y]=cell;
     }
   }
+  shellCache.set(boardEl, { key, cells });
   return cells;
 }
 
-function unitLabel(u){
-  if(u.type==='commander') return '★';
-  if(u.type==='tank') return '⬢';
-  return '';
-}
 function ownerVars(owner){
   return owner==='p1' ? '--u-light:#5aa8d6;--u-dark:#215577;' : '--u-light:#d67a5a;--u-dark:#7a2818;';
 }
@@ -519,7 +550,7 @@ function paintUnits(cells, cfg, units, barricades, tank, stones, shields, fogSet
     if(c){
       const u = document.createElement('div'); u.className='unit tank';
       if(tank.owner) u.style.cssText = ownerVars(tank.owner);
-      u.textContent='⬢';
+      u.textContent='';
       c.appendChild(u); c.appendChild(hpBar(tank.hp, cfg.tankHp));
     }
   }
@@ -537,7 +568,6 @@ function paintUnits(cells, cfg, units, barricades, tank, stones, shields, fogSet
     const d = document.createElement('div');
     d.className = 'unit ' + (u.type==='commander' ? 'commander' : 'soldier');
     d.style.cssText = ownerVars(u.owner);
-    d.textContent = unitLabel(u);
     d.dataset.unitId = u.id;
     if(u.id === selectedUnitId) c.classList.add('selected');
     c.appendChild(d); c.appendChild(hpBar(u.hp, u.maxHp));
