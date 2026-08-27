@@ -492,11 +492,22 @@ function drawBoardShell(cfg, boardEl){
 }
 
 function unitLabel(u){
-  if(u.type==='commander') return 'K';
-  if(u.type==='tank') return 'T';
-  return 'A';
+  if(u.type==='commander') return '★';
+  if(u.type==='tank') return '⬢';
+  return '';
 }
-function ownerColor(owner){ return owner==='p1' ? 'var(--p1)' : 'var(--p2)'; }
+function ownerVars(owner){
+  return owner==='p1' ? '--u-light:#5aa8d6;--u-dark:#215577;' : '--u-light:#d67a5a;--u-dark:#7a2818;';
+}
+function hpBar(hp, maxHp){
+  const wrap = document.createElement('div'); wrap.className='hp-wrap';
+  const fill = document.createElement('div');
+  const pct = Math.max(0, Math.round((hp/maxHp)*100));
+  fill.className = 'hp-fill' + (pct<=40?' low':'');
+  fill.style.width = pct+'%';
+  wrap.appendChild(fill);
+  return wrap;
+}
 
 function paintUnits(cells, cfg, units, barricades, tank, stones, shields, fogSet){
   stones.forEach(s=>{
@@ -507,10 +518,9 @@ function paintUnits(cells, cfg, units, barricades, tank, stones, shields, fogSet
     const c = cells[tank.x+'_'+tank.y];
     if(c){
       const u = document.createElement('div'); u.className='unit tank';
-      u.style.background = tank.owner ? ownerColor(tank.owner) : '#555';
-      u.textContent='T';
-      const hp = document.createElement('div'); hp.className='hp'; hp.textContent=tank.hp;
-      c.appendChild(u); c.appendChild(hp);
+      if(tank.owner) u.style.cssText = ownerVars(tank.owner);
+      u.textContent='⬢';
+      c.appendChild(u); c.appendChild(hpBar(tank.hp, cfg.tankHp));
     }
   }
   barricades.forEach(b=>{
@@ -523,15 +533,14 @@ function paintUnits(cells, cfg, units, barricades, tank, stones, shields, fogSet
   units.forEach(u=>{
     if(!u.alive) return;
     const c = cells[u.x+'_'+u.y]; if(!c) return;
-    if(fogSet && fogSet.has(u.x+'_'+u.y) === false && u.owner !== MY_SLOT) return; // düşman görünmüyorsa çizme
+    if(fogSet && !fogSet.has(u.x+'_'+u.y) && u.owner !== MY_SLOT) return; // düşman görünmüyorsa çizme
     const d = document.createElement('div');
-    d.className = 'unit'+(u.type==='commander'?' commander':'');
-    d.style.background = ownerColor(u.owner);
+    d.className = 'unit ' + (u.type==='commander' ? 'commander' : 'soldier');
+    d.style.cssText = ownerVars(u.owner);
     d.textContent = unitLabel(u);
     d.dataset.unitId = u.id;
     if(u.id === selectedUnitId) c.classList.add('selected');
-    const hp = document.createElement('div'); hp.className='hp'; hp.textContent = u.hp;
-    c.appendChild(d); c.appendChild(hp);
+    c.appendChild(d); c.appendChild(hpBar(u.hp, u.maxHp));
     // kendi kalkanlı biriminde halka göster (rakip göremez, fog-of-war kuralı)
     const myShield = shields[MY_SLOT];
     if(myShield && myShield.assignedTo === u.id && u.owner===MY_SLOT){
@@ -590,19 +599,35 @@ function renderDeploy(){
       if(!isInOwnZone(cfg, MY_SLOT, x, y)){ toast('Sadece kendi bölgene yerleştirebilirsin.'); return; }
       if(occupied(x,y)){ toast('Kare dolu.'); return; }
       if(!deploySelection){ toast('Önce paletten bir birim seç.'); return; }
-      if(deploySelection==='barricade'){
-        if(remainingBarricades<=0) return;
-        const nb = { id:'b'+Math.random().toString(36).slice(2,8), owner:MY_SLOT, x,y, dir:'N', hp:cfg.barricadeHp, open:false, interactedTurn:0 };
-        await updateDoc(roomRef(ROOM_CODE), { barricades: [...ROOM.barricades, nb] });
-      } else {
-        const type = deploySelection;
-        const curSoldiers = ROOM.units.filter(u=>u.owner===MY_SLOT && u.type==='soldier').length;
-        const curCommanders = ROOM.units.filter(u=>u.owner===MY_SLOT && u.type==='commander').length;
-        if(type==='soldier' && curSoldiers>=12){ toast('12 askerin de zaten sahada — fazlasını koyamazsın.'); deploySelection=null; render(); return; }
-        if(type==='commander' && curCommanders>=2){ toast('2 komutanın da zaten sahada — fazlasını koyamazsın.'); deploySelection=null; render(); return; }
-        const hp = type==='commander'? cfg.commanderHp : cfg.soldierHp;
-        const nu = { id:'u'+Math.random().toString(36).slice(2,8), owner:MY_SLOT, type, x, y, hp, maxHp:hp, alive:true, commanderId:null };
-        await updateDoc(roomRef(ROOM_CODE), { units: [...ROOM.units, nu] });
+      const selectionAtClick = deploySelection;
+      try{
+        await runTransaction(db, async (tx)=>{
+          const snap = await tx.get(roomRef(ROOM_CODE));
+          const data = snap.data();
+          const stillOccupied = data.units.some(u=>u.alive && u.x===x && u.y===y) ||
+            data.barricades.some(b=>b.hp>0 && b.x===x && b.y===y) ||
+            (data.tank.x===x && data.tank.y===y) || data.stones.some(s=>s.x===x&&s.y===y);
+          if(stillOccupied) throw new Error('occupied');
+          if(selectionAtClick==='barricade'){
+            const curBar = data.barricades.filter(b=>b.owner===MY_SLOT).length;
+            if(curBar>=cfg.barricadeCount) throw new Error('limit');
+            const nb = { id:'b'+Math.random().toString(36).slice(2,8), owner:MY_SLOT, x,y, dir:'N', hp:cfg.barricadeHp, open:false, interactedTurn:0 };
+            tx.update(roomRef(ROOM_CODE), { barricades: [...data.barricades, nb] });
+          } else {
+            const type = selectionAtClick;
+            const curSoldiers = data.units.filter(u=>u.owner===MY_SLOT && u.type==='soldier').length;
+            const curCommanders = data.units.filter(u=>u.owner===MY_SLOT && u.type==='commander').length;
+            if(type==='soldier' && curSoldiers>=12) throw new Error('limit-soldier');
+            if(type==='commander' && curCommanders>=2) throw new Error('limit-commander');
+            const hp = type==='commander'? cfg.commanderHp : cfg.soldierHp;
+            const nu = { id:'u'+Math.random().toString(36).slice(2,8), owner:MY_SLOT, type, x, y, hp, maxHp:hp, alive:true, commanderId:null };
+            tx.update(roomRef(ROOM_CODE), { units: [...data.units, nu] });
+          }
+        });
+      } catch(e){
+        if(e.message==='occupied') toast('Tam o an rakip/sen oraya bir şey koydu, kare artık dolu.');
+        else if(e.message.startsWith('limit')) { toast('Bu birimden zaten hakkın kadar koydun.'); deploySelection=null; render(); }
+        else { toast('Bir sorun oldu, tekrar dene.'); console.error(e); }
       }
     };
   });
