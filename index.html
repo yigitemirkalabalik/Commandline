@@ -177,7 +177,7 @@
     <div class="layout">
       <div class="card">
         <h2>Dizilim Aşaması</h2>
-        <div id="board"></div>
+        <div id="board-deploy"></div>
       </div>
       <div class="card">
         <h3>Yerleştirilecekler</h3>
@@ -197,7 +197,7 @@
           <h2 style="margin:0;">Tur <span id="turnNumber"></span> — <span id="turnOwner"></span></h2>
           <span class="badge" id="apBadge"></span>
         </div>
-        <div id="board" style="margin-top:10px;"></div>
+        <div id="board-battle" style="margin-top:10px;"></div>
       </div>
       <div class="card">
         <h3>Durum</h3>
@@ -571,7 +571,7 @@ function computeVisibleSet(cfg, units, owner, reveals, turnNumber){
 let deploySelection = null; // 'soldier' | 'commander' | 'barricade'
 function renderDeploy(){
   const cfg = ROOM.config;
-  const board = $('board');
+  const board = $('board-deploy');
   const cells = drawBoardShell(cfg, board);
   const myUnits = ROOM.units.filter(u=>u.owner===MY_SLOT);
   const myBars = ROOM.barricades.filter(b=>b.owner===MY_SLOT);
@@ -657,7 +657,7 @@ function getChain(){ return computeCommandChains(ROOM.units, ROOM.config); }
 
 function renderBattle(){
   const cfg = ROOM.config;
-  const board = $('board');
+  const board = $('board-battle');
   const cells = drawBoardShell(cfg, board);
   const fog = computeVisibleSet(cfg, ROOM.units, MY_SLOT, ROOM.reveals||[], ROOM.turnNumber);
   // fog overlay: sadece görülmeyen ve hiç kimsenin birimi olmayan rakip alanlarını karart (basit sürüm)
