@@ -107,6 +107,10 @@
   .hp-fill.low{background:linear-gradient(90deg,#d16a4a,#c9432f);}
   .shield-ring{position:absolute;inset:0;border:2px dashed var(--accent2);border-radius:50%;z-index:1;animation:pulse 1.6s ease-in-out infinite;}
   @keyframes pulse{0%,100%{opacity:.5;}50%{opacity:1;}}
+  .chain-ring{position:absolute;inset:-2px;border:2px solid;border-radius:50%;z-index:1;opacity:.85;}
+  .unit.unlinked{filter:grayscale(.55) brightness(.75);}
+  .hint-move{position:absolute;inset:38%;background:rgba(163,193,79,.55);border-radius:50%;z-index:1;pointer-events:none;}
+  .hint-attack{position:absolute;inset:6%;border:3px solid rgba(201,67,47,.85);border-radius:50%;z-index:1;pointer-events:none;box-shadow:0 0 8px rgba(201,67,47,.5) inset;}
   .barricade{position:absolute;background:linear-gradient(160deg,#a9824a,#6b4e26);z-index:1;box-shadow:0 0 4px rgba(0,0,0,.6);}
   .barricade.open{opacity:.3;background:repeating-linear-gradient(45deg,#a9824a 0 4px,transparent 4px 8px);}
   .bar-N{top:0;left:4%;right:4%;height:20%;border-radius:0 0 2px 2px;}
@@ -128,6 +132,31 @@
     box-shadow:0 8px 24px rgba(0,0,0,.5);
   }
   code{background:#000;padding:2px 6px;border-radius:4px;}
+
+  .turnbanner{
+    padding:12px 18px;border-radius:3px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;
+    font-size:15px;text-align:center;margin-bottom:10px;border:1px solid;
+  }
+  .turnbanner.mine{background:rgba(163,193,79,.15);border-color:var(--accent);color:var(--accent);}
+  .turnbanner.theirs{background:rgba(255,255,255,.03);border-color:var(--line);color:var(--dim);}
+  .ap-pips{display:flex;gap:5px;align-items:center;}
+  .pip{width:14px;height:14px;border-radius:50%;border:2px solid var(--accent2);}
+  .pip.filled{background:var(--accent2);}
+
+  #diceOverlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:18px;
+  }
+  .dice-row{display:flex;gap:14px;align-items:center;}
+  .dice-row .lbl{width:80px;text-align:right;font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;}
+  .die{
+    width:64px;height:64px;background:linear-gradient(160deg,#fff,#ccc);border-radius:10px;
+    display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:900;color:#222;
+    box-shadow:0 6px 16px rgba(0,0,0,.5);
+  }
+  .die.rolling{animation:spin .12s linear infinite;}
+  @keyframes spin{0%{transform:rotate(0deg) scale(1);}50%{transform:rotate(180deg) scale(1.08);}100%{transform:rotate(360deg) scale(1);}}
+  #diceResultText{font-size:16px;color:var(--ink);text-align:center;max-width:420px;font-weight:700;}
 </style>
 </head>
 <body>
@@ -146,7 +175,7 @@
       </div>
       <div>
         <h3 style="margin-top:14px;">Odaya katıl</h3>
-        <input type="text" id="joinCode" placeholder="Oda kodu (örn. AB3F)" maxlength="6" style="margin-bottom:8px;">
+        <input type="text" id="joinCode" placeholder="Oda kodu (örn. AB3F)" maxlength="6" style="margin-bottom:8px;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
         <button id="btnJoin" class="secondary">Katıl</button>
       </div>
     </div>
@@ -207,9 +236,10 @@
   <div id="screen-battle" class="hidden">
     <div class="layout">
       <div class="card">
-        <div class="row" style="justify-content:space-between;">
-          <h2 style="margin:0;">Tur <span id="turnNumber"></span> — <span id="turnOwner"></span></h2>
-          <span class="badge" id="apBadge"></span>
+        <div id="turnOwner"></div>
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <h2 style="margin:0;font-size:14px;color:var(--dim);">Tur <span id="turnNumber"></span></h2>
+          <span id="apBadge"></span>
         </div>
         <div id="board-battle" style="margin-top:10px;"></div>
       </div>
@@ -234,7 +264,12 @@
 </div>
 
 <button id="btnEndGame" class="danger hidden" style="position:fixed;top:12px;right:12px;z-index:40;">⏹ Oyunu Bitir</button>
-<div style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#4a4f3a;z-index:60;">build v9</div>
+<div id="diceOverlay" class="hidden">
+  <div class="dice-row" id="diceRowAtk"></div>
+  <div class="dice-row" id="diceRowDef"></div>
+  <div id="diceResultText"></div>
+</div>
+<div style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#4a4f3a;z-index:60;">build v11</div>
 <div id="toast" class="toast hidden"></div>
 
 <script type="module">
@@ -262,7 +297,6 @@ const DEFAULT_CONFIG = {
   groupOrderMaxUnits: 4,
   shieldCount: 3, barricadeCount: 6, barricadeHp: 3,
   soldierHp: 2, commanderHp: 4, tankHp: 7, tankCaptureTurns: 2,
-  reconCharges: 4, reconCooldown: 2, reconRadius: 1, reconDuration: 2,
   airstrikeCharges: 4, airstrikeCooldown: 3,
   maxTurns: 50,
 };
@@ -270,6 +304,11 @@ function deployRows(cfg){ return { p1:[0,3], p2:[cfg.boardHeight-4, cfg.boardHei
 function isInOwnZone(cfg, owner, x, y){ const [lo,hi]=deployRows(cfg)[owner]; return y>=lo && y<=hi; }
 function inBounds(cfg,x,y){ return x>=0 && x<cfg.boardWidth && y>=0 && y<cfg.boardHeight; }
 function dist(a,b){ return Math.max(Math.abs(a.x-b.x), Math.abs(a.y-b.y)); }
+function neighbors8(x,y){
+  const out=[];
+  for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){ if(dx===0&&dy===0) continue; out.push([x+dx,y+dy]); }
+  return out;
+}
 function rollDie(){ return 1+Math.floor(Math.random()*6); }
 
 function computeCommandChains(units, cfg){
@@ -331,8 +370,10 @@ let MY_SLOT = null; // 'p1' | 'p2'
 let ROOM = null; // last snapshot data
 let unsub = null;
 let selectedUnitId = null;
-let pendingAction = null; // 'move' | 'attack' | 'placeBarricade' | 'moveBarricade' etc
-let deployBuffer = { units: [], barricades: [] };
+let pendingAction = null; // 'attack' | 'recon' | 'barricade' | 'moveBarricade'
+let pendingBarricadeId = null;
+let pendingUnits = [];      // dizilimde henüz sunucudan onaylanmamış, anlık gösterilen birimler
+let pendingBarricades = []; // aynısı barikatlar için
 
 const $ = (id)=>document.getElementById(id);
 function show(id){ ['screen-home','screen-mode','screen-config','screen-lobby','screen-deploy','screen-battle','screen-gameover'].forEach(s=>$(s).classList.toggle('hidden', s!==id)); }
@@ -354,7 +395,6 @@ function buildConfigForm(){
     ['commandChainBonusThreshold','Bonus AP için bağlı asker'],
     ['shieldCount','Kalkan sayısı'], ['barricadeCount','Barikat sayısı'], ['barricadeHp','Barikat canı'],
     ['soldierHp','Asker canı'], ['commanderHp','Komutan canı'], ['tankHp','Tank canı'],
-    ['reconCharges','Keşif hakkı'], ['reconCooldown','Keşif bekleme (tur)'],
     ['airstrikeCharges','Bombardıman hakkı'], ['airstrikeCooldown','Bombardıman bekleme (tur)'],
     ['boardWidth','Tahta genişliği'], ['boardHeight','Tahta uzunluğu'], ['maxTurns','Maksimum tur'],
   ];
@@ -402,6 +442,10 @@ $('btnJoin').onclick = async ()=>{
 };
 
 function buildInitialRoom(cfg, hostName){
+  const rows = deployRows(cfg);
+  const neutralStart = rows.p1[1]+1, neutralEnd = rows.p2[0]-1;
+  const centerY = Math.round((neutralStart+neutralEnd)/2);
+  const centerX = Math.floor(cfg.boardWidth/2);
   return {
     config: cfg,
     phase: 'lobby',
@@ -413,17 +457,16 @@ function buildInitialRoom(cfg, hostName){
     usedActionThisSelectStep: {},
     units: [],
     barricades: [],
-    tank: { x: Math.floor(cfg.boardWidth/2), y: Math.floor(cfg.boardHeight/2), hp: cfg.tankHp, owner:null, adjTurnsP1:0, adjTurnsP2:0, piloted:false },
+    tank: { x: centerX, y: centerY, hp: cfg.tankHp, owner:null, adjTurnsP1:0, adjTurnsP2:0, piloted:false },
     stones: [
-      { x: Math.floor(cfg.boardWidth/2)-2, y: Math.floor(cfg.boardHeight/2) },
-      { x: Math.floor(cfg.boardWidth/2)+2, y: Math.floor(cfg.boardHeight/2) },
+      { x: centerX-2, y: centerY },
+      { x: centerX+2, y: centerY },
     ],
     shields: { p1:{ pool: cfg.shieldCount, assignedTo:null, usedThisTurn:false }, p2:{ pool: cfg.shieldCount, assignedTo:null, usedThisTurn:false } },
     aircraft: {
-      p1:{ reconCharges: cfg.reconCharges, reconCd:0, airstrikeCharges: cfg.airstrikeCharges, airstrikeCd:0 },
-      p2:{ reconCharges: cfg.reconCharges, reconCd:0, airstrikeCharges: cfg.airstrikeCharges, airstrikeCd:0 },
+      p1:{ airstrikeCharges: cfg.airstrikeCharges, airstrikeCd:0 },
+      p2:{ airstrikeCharges: cfg.airstrikeCharges, airstrikeCd:0 },
     },
-    reveals: [], // {owner, x, y, radius, expiresTurn}
     log: ['Oda kuruldu.'],
     winner: null,
     createdAt: Date.now(),
@@ -436,6 +479,8 @@ function subscribeRoom(code){
   unsub = onSnapshot(roomRef(code), (snap)=>{
     if(!snap.exists()) return;
     ROOM = snap.data();
+    pendingUnits = pendingUnits.filter(u=>!ROOM.units.some(x=>x.id===u.id));
+    pendingBarricades = pendingBarricades.filter(b=>!ROOM.barricades.some(x=>x.id===b.id));
     render();
   });
 }
@@ -540,7 +585,15 @@ function hpBar(hp, maxHp){
   return wrap;
 }
 
-function paintUnits(cells, cfg, units, barricades, tank, stones, shields, fogSet){
+function commanderAccent(cfg, units, commanderId){
+  // Bir oyuncunun 2 komutanına farklı vurgu rengi ver (zincir rengi görselleştirmesi için)
+  const owner = (units.find(u=>u.id===commanderId)||{}).owner;
+  const commandersOfOwner = units.filter(u=>u.type==='commander' && u.owner===owner).sort((a,b)=>a.id<b.id?-1:1);
+  const idx = commandersOfOwner.findIndex(c=>c.id===commanderId);
+  return idx===0 ? '#f0d24a' : '#4af0d2'; // 1. komutan sarı halka, 2. komutan turkuaz halka
+}
+
+function paintUnits(cells, cfg, units, barricades, tank, stones, shields, chainOf, moveHints, attackHints){
   stones.forEach(s=>{
     const c = cells[s.x+'_'+s.y]; if(!c) return;
     const d = document.createElement('div'); d.className='controlpoint'; c.appendChild(d);
@@ -549,6 +602,7 @@ function paintUnits(cells, cfg, units, barricades, tank, stones, shields, fogSet
     const c = cells[tank.x+'_'+tank.y];
     if(c){
       const u = document.createElement('div'); u.className='unit tank';
+      u.dataset.isTank='1';
       if(tank.owner) u.style.cssText = ownerVars(tank.owner);
       u.textContent='';
       c.appendChild(u); c.appendChild(hpBar(tank.hp, cfg.tankHp));
@@ -564,37 +618,42 @@ function paintUnits(cells, cfg, units, barricades, tank, stones, shields, fogSet
   units.forEach(u=>{
     if(!u.alive) return;
     const c = cells[u.x+'_'+u.y]; if(!c) return;
-    if(fogSet && !fogSet.has(u.x+'_'+u.y) && u.owner !== MY_SLOT) return; // düşman görünmüyorsa çizme
     const d = document.createElement('div');
     d.className = 'unit ' + (u.type==='commander' ? 'commander' : 'soldier');
     d.style.cssText = ownerVars(u.owner);
     d.dataset.unitId = u.id;
     if(u.id === selectedUnitId) c.classList.add('selected');
     c.appendChild(d); c.appendChild(hpBar(u.hp, u.maxHp));
-    // kendi kalkanlı biriminde halka göster (rakip göremez, fog-of-war kuralı)
-    const myShield = shields[MY_SLOT];
-    if(myShield && myShield.assignedTo === u.id && u.owner===MY_SLOT){
+
+    // Komuta zinciri renklendirmesi: bağlıysa komutanının rengiyle halka, değilse gri/soluk
+    if(u.type!=='commander'){
+      const cmdId = chainOf[u.id];
+      if(cmdId){
+        const ring = document.createElement('div');
+        ring.className='chain-ring';
+        ring.style.borderColor = commanderAccent(cfg, units, cmdId);
+        c.appendChild(ring);
+      } else {
+        d.classList.add('unlinked');
+      }
+    }
+
+    // Harita her zaman tam açık — tek gizli bilgi kalkanın kimde olduğu, sadece sahibi görür.
+    const ownerShield = shields[u.owner];
+    if(ownerShield && ownerShield.assignedTo === u.id && u.owner===MY_SLOT){
       const ring = document.createElement('div'); ring.className='shield-ring'; c.appendChild(ring);
     }
   });
-}
 
-function computeVisibleSet(cfg, units, owner, reveals, turnNumber){
-  const vis = new Set();
-  units.filter(u=>u.alive && u.owner===owner).forEach(u=>{
-    const r = u.type==='commander' ? 3 : (u.type==='tank' ? 2 : 2);
-    for(let dx=-r; dx<=r; dx++) for(let dy=-r; dy<=r; dy++){
-      const x=u.x+dx, y=u.y+dy;
-      if(inBounds(cfg,x,y) && Math.max(Math.abs(dx),Math.abs(dy))<=r) vis.add(x+'_'+y);
-    }
+  // Chess.com tarzı: seçili birimin gidebileceği/saldırabileceği kareler
+  (moveHints||new Set()).forEach(key=>{
+    const c = cells[key]; if(!c) return;
+    const dot = document.createElement('div'); dot.className='hint-move'; c.appendChild(dot);
   });
-  reveals.filter(r=>r.owner===owner && r.expiresTurn>=turnNumber).forEach(r=>{
-    for(let dx=-r.radius; dx<=r.radius; dx++) for(let dy=-r.radius; dy<=r.radius; dy++){
-      const x=r.x+dx, y=r.y+dy;
-      if(inBounds(cfg,x,y)) vis.add(x+'_'+y);
-    }
+  (attackHints||new Set()).forEach(key=>{
+    const c = cells[key]; if(!c) return;
+    const ring = document.createElement('div'); ring.className='hint-attack'; c.appendChild(ring);
   });
-  return vis;
 }
 
 // ---------- DEPLOY SCREEN ----------
@@ -603,10 +662,11 @@ function renderDeploy(){
   const cfg = ROOM.config;
   const board = $('board-deploy');
   const cells = drawBoardShell(cfg, board);
-  const myUnits = ROOM.units.filter(u=>u.owner===MY_SLOT);
-  const myBars = ROOM.barricades.filter(b=>b.owner===MY_SLOT);
-  const allUnitsToShow = ROOM.units; // deploy'da herkes kendi tarafını görür, rakip zaten henüz gizli kalabilir ama basitlik için gösterelim
-  paintUnits(cells, cfg, ROOM.units, ROOM.barricades, ROOM.tank, ROOM.stones, ROOM.shields, null);
+  const displayUnits = [...ROOM.units, ...pendingUnits];
+  const displayBars = [...ROOM.barricades, ...pendingBarricades];
+  const myUnits = displayUnits.filter(u=>u.owner===MY_SLOT);
+  const myBars = displayBars.filter(b=>b.owner===MY_SLOT);
+  paintUnits(cells, cfg, displayUnits, displayBars, ROOM.tank, ROOM.stones, ROOM.shields, {}, null, null);
 
   const remainingSoldiers = 12 - myUnits.filter(u=>u.type==='soldier').length;
   const remainingCommanders = 2 - myUnits.filter(u=>u.type==='commander').length;
@@ -624,46 +684,61 @@ function renderDeploy(){
   });
 
   board.querySelectorAll('.cell').forEach(cell=>{
-    cell.onclick = async ()=>{
+    cell.onclick = ()=>{
       const x=+cell.dataset.x, y=+cell.dataset.y;
       if(!isInOwnZone(cfg, MY_SLOT, x, y)){ toast('Sadece kendi bölgene yerleştirebilirsin.'); return; }
       if(occupied(x,y)){ toast('Kare dolu.'); return; }
       if(!deploySelection){ toast('Önce paletten bir birim seç.'); return; }
       const selectionAtClick = deploySelection;
-      try{
-        await runTransaction(db, async (tx)=>{
-          const snap = await tx.get(roomRef(ROOM_CODE));
-          const data = snap.data();
-          const stillOccupied = data.units.some(u=>u.alive && u.x===x && u.y===y) ||
-            data.barricades.some(b=>b.hp>0 && b.x===x && b.y===y) ||
-            (data.tank.x===x && data.tank.y===y) || data.stones.some(s=>s.x===x&&s.y===y);
-          if(stillOccupied) throw new Error('occupied');
-          if(selectionAtClick==='barricade'){
-            const curBar = data.barricades.filter(b=>b.owner===MY_SLOT).length;
-            if(curBar>=cfg.barricadeCount) throw new Error('limit');
-            const nb = { id:'b'+Math.random().toString(36).slice(2,8), owner:MY_SLOT, x,y, dir:'N', hp:cfg.barricadeHp, open:false, interactedTurn:0 };
-            tx.update(roomRef(ROOM_CODE), { barricades: [...data.barricades, nb] });
-          } else {
-            const type = selectionAtClick;
-            const curSoldiers = data.units.filter(u=>u.owner===MY_SLOT && u.type==='soldier').length;
-            const curCommanders = data.units.filter(u=>u.owner===MY_SLOT && u.type==='commander').length;
-            if(type==='soldier' && curSoldiers>=12) throw new Error('limit-soldier');
-            if(type==='commander' && curCommanders>=2) throw new Error('limit-commander');
-            const hp = type==='commander'? cfg.commanderHp : cfg.soldierHp;
-            const nu = { id:'u'+Math.random().toString(36).slice(2,8), owner:MY_SLOT, type, x, y, hp, maxHp:hp, alive:true, commanderId:null };
-            tx.update(roomRef(ROOM_CODE), { units: [...data.units, nu] });
-          }
-        });
-      } catch(e){
-        if(e.message==='occupied') toast('Tam o an rakip/sen oraya bir şey koydu, kare artık dolu.');
-        else if(e.message.startsWith('limit')) { toast('Bu birimden zaten hakkın kadar koydun.'); deploySelection=null; render(); }
-        else { toast('Bir sorun oldu, tekrar dene.'); console.error(e); }
+
+      // Optimistic: anında yerel olarak göster, arka planda transaction ile onaylat
+      let optimisticEntry;
+      if(selectionAtClick==='barricade'){
+        if(remainingBarricades<=0) return;
+        optimisticEntry = { id:'b'+Math.random().toString(36).slice(2,8), owner:MY_SLOT, x,y, dir:'N', hp:cfg.barricadeHp, open:false, interactedTurn:0 };
+        pendingBarricades.push(optimisticEntry);
+      } else {
+        const type = selectionAtClick;
+        if(type==='soldier' && remainingSoldiers<=0) return;
+        if(type==='commander' && remainingCommanders<=0) return;
+        const hp = type==='commander'? cfg.commanderHp : cfg.soldierHp;
+        optimisticEntry = { id:'u'+Math.random().toString(36).slice(2,8), owner:MY_SLOT, type, x, y, hp, maxHp:hp, alive:true, commanderId:null };
+        pendingUnits.push(optimisticEntry);
       }
+      render();
+
+      runTransaction(db, async (tx)=>{
+        const snap = await tx.get(roomRef(ROOM_CODE));
+        const data = snap.data();
+        const stillOccupied = data.units.some(u=>u.alive && u.x===x && u.y===y) ||
+          data.barricades.some(b=>b.hp>0 && b.x===x && b.y===y) ||
+          (data.tank.x===x && data.tank.y===y) || data.stones.some(s=>s.x===x&&s.y===y);
+        if(stillOccupied) throw new Error('occupied');
+        if(selectionAtClick==='barricade'){
+          const curBar = data.barricades.filter(b=>b.owner===MY_SLOT).length;
+          if(curBar>=cfg.barricadeCount) throw new Error('limit');
+          tx.update(roomRef(ROOM_CODE), { barricades: [...data.barricades, optimisticEntry] });
+        } else {
+          const curSoldiers = data.units.filter(u=>u.owner===MY_SLOT && u.type==='soldier').length;
+          const curCommanders = data.units.filter(u=>u.owner===MY_SLOT && u.type==='commander').length;
+          if(optimisticEntry.type==='soldier' && curSoldiers>=12) throw new Error('limit-soldier');
+          if(optimisticEntry.type==='commander' && curCommanders>=2) throw new Error('limit-commander');
+          tx.update(roomRef(ROOM_CODE), { units: [...data.units, optimisticEntry] });
+        }
+      }).catch(e=>{
+        // Onaylanmadı — optimistik girdiyi geri al
+        pendingUnits = pendingUnits.filter(u=>u.id!==optimisticEntry.id);
+        pendingBarricades = pendingBarricades.filter(b=>b.id!==optimisticEntry.id);
+        if(e.message==='occupied') toast('Tam o an rakip/sen oraya bir şey koydu, kare artık dolu.');
+        else if(e.message && e.message.startsWith('limit')) toast('Bu birimden zaten hakkın kadar koydun.');
+        else { toast('Bir sorun oldu, tekrar dene.'); console.error(e); }
+        render();
+      });
     };
   });
 
   function occupied(x,y){
-    return ROOM.units.some(u=>u.alive && u.x===x && u.y===y) || ROOM.barricades.some(b=>b.hp>0 && b.x===x && b.y===y)
+    return displayUnits.some(u=>u.alive && u.x===x && u.y===y) || displayBars.some(b=>b.hp>0 && b.x===x && b.y===y)
       || (ROOM.tank.x===x && ROOM.tank.y===y) || ROOM.stones.some(s=>s.x===x&&s.y===y);
   }
 
@@ -685,30 +760,47 @@ $('btnDeployReady').onclick = async ()=>{
 // ---------- BATTLE SCREEN ----------
 function getChain(){ return computeCommandChains(ROOM.units, ROOM.config); }
 
+function computeReachable(sel, chainOf){
+  const moves = new Set(), attacks = new Set();
+  if(!sel) return {moves, attacks};
+  neighbors8(sel.x, sel.y).forEach(([x,y])=>{
+    if(!inBounds(ROOM.config, x, y)) return;
+    const key = x+'_'+y;
+    if(x===ROOM.tank.x && y===ROOM.tank.y && ROOM.tank.hp>0){
+      if(ROOM.tank.owner!==MY_SLOT) attacks.add(key);
+      return;
+    }
+    const enemyUnit = ROOM.units.find(u=>u.alive && u.x===x && u.y===y && u.owner!==sel.owner);
+    if(enemyUnit){ attacks.add(key); return; }
+    if(occupiedAny(x,y)) return;
+    if(blockedByClosedBarricade(x,y)) return;
+    moves.add(key);
+  });
+  return {moves, attacks};
+}
+
 function renderBattle(){
   const cfg = ROOM.config;
   const board = $('board-battle');
   const cells = drawBoardShell(cfg, board);
-  const fog = computeVisibleSet(cfg, ROOM.units, MY_SLOT, ROOM.reveals||[], ROOM.turnNumber);
-  // fog overlay: sadece görülmeyen ve hiç kimsenin birimi olmayan rakip alanlarını karart (basit sürüm)
-  board.querySelectorAll('.cell').forEach(c=>{
-    const key = c.dataset.x+'_'+c.dataset.y;
-    if(!fog.has(key)) c.classList.add('fog');
-  });
-  paintUnits(cells, cfg, ROOM.units, ROOM.barricades, ROOM.tank, ROOM.stones, ROOM.shields, fog);
+  const chainOf = getChain();
+  const sel = ROOM.units.find(u=>u.id===selectedUnitId && u.alive);
+  const canAct = sel && sel.owner===MY_SLOT && myTurn() && !pendingAction;
+  const { moves, attacks } = canAct ? computeReachable(sel, chainOf) : {moves:null, attacks:null};
+  paintUnits(cells, cfg, ROOM.units, ROOM.barricades, ROOM.tank, ROOM.stones, ROOM.shields, chainOf, moves, attacks);
 
   $('turnNumber').textContent = ROOM.turnNumber + ' / ' + cfg.maxTurns;
-  $('turnOwner').textContent = (ROOM.players[ROOM.currentTurn]||{}).name || ROOM.currentTurn;
-  $('apBadge').textContent = 'AP: ' + ROOM.ap[MY_SLOT];
+  const mine = myTurn();
+  $('turnOwner').innerHTML = `<span class="turnbanner ${mine?'mine':'theirs'}" style="display:block;">${mine ? '🟢 SIRA SENDE' : '🔴 RAKİP OYNUYOR ('+((ROOM.players[ROOM.currentTurn]||{}).name||ROOM.currentTurn)+')'}</span>`;
+  const ap = ROOM.ap[MY_SLOT];
+  $('apBadge').innerHTML = `<span class="ap-pips">${Array.from({length:Math.max(ap,3)}).map((_,i)=>`<span class="pip ${i<ap?'filled':''}"></span>`).join('')}</span>`;
 
-  const chainOf = getChain();
   const myAir = ROOM.aircraft[MY_SLOT];
   const myShield = ROOM.shields[MY_SLOT];
   $('statPanel').innerHTML = `
-    <div class="statline"><span>Kalkan</span><span>${myShield.pool}</span></div>
-    <div class="statline"><span>Keşif</span><span>${myAir.reconCharges} (bekleme:${myAir.reconCd})</span></div>
-    <div class="statline"><span>Bombardıman</span><span>${myAir.airstrikeCharges} (bekleme:${myAir.airstrikeCd})</span></div>
-    <div class="statline"><span>Tank</span><span>${ROOM.tank.owner || 'tarafsız'}</span></div>
+    <div class="statline"><span>🛡 Kalkan</span><span>${myShield.pool}</span></div>
+    <div class="statline"><span>💣 Bombardıman</span><span>${myAir.airstrikeCharges} adet (bekleme: ${myAir.airstrikeCd} tur)</span></div>
+    <div class="statline"><span>🚜 Tank</span><span>${ROOM.tank.owner ? (ROOM.tank.owner===MY_SLOT?'Sende':'Rakipte') : 'Tarafsız'}</span></div>
   `;
 
   $('log').innerHTML = (ROOM.log||[]).slice(-40).map(l=>`<div>${l}</div>`).join('');
@@ -717,19 +809,19 @@ function renderBattle(){
     cell.onclick = ()=> onCellClick(+cell.dataset.x, +cell.dataset.y, chainOf);
   });
 
-  renderSelPanel(chainOf);
+  renderSelPanel(chainOf, moves, attacks);
 }
 
 function myTurn(){ return ROOM.currentTurn === MY_SLOT; }
 
-function renderSelPanel(chainOf){
+function renderSelPanel(chainOf, moves, attacks){
   const bar = $('actionBar'); bar.innerHTML='';
   const sel = ROOM.units.find(u=>u.id===selectedUnitId);
   if(!sel){
-    $('selPanel').textContent = 'Bir birim seç.';
+    $('selPanel').textContent = 'Bir birim seç — gidebileceği/saldırabileceği kareler tahtada işaretlenir.';
   } else {
-    const linked = chainOf[sel.id] ? 'zincire bağlı' : 'bağlantısız';
-    $('selPanel').innerHTML = `${sel.owner==='p1'?'Mavi':'Kırmızı'} ${unitLabel(sel)} — HP ${sel.hp}/${sel.maxHp} — ${linked}`;
+    const linked = sel.type==='commander' ? 'komutan' : (chainOf[sel.id] ? 'zincire bağlı' : 'zincire bağlı değil');
+    $('selPanel').innerHTML = `${sel.owner==='p1'?'🔵 Mavi':'🔴 Kırmızı'} ${unitLabel(sel)} — HP ${sel.hp}/${sel.maxHp} — ${linked}`;
   }
   if(!myTurn()){
     bar.innerHTML = '<span class="muted">Rakibin turu.</span>';
@@ -738,69 +830,103 @@ function renderSelPanel(chainOf){
   const ap = ROOM.ap[MY_SLOT];
   const btn = (label, fn, disabled)=>{ const b=document.createElement('button'); b.textContent=label; b.className='secondary'; b.disabled=!!disabled; b.onclick=fn; bar.appendChild(b); };
 
-  if(sel && sel.owner===MY_SLOT && sel.alive){
-    btn('Hareket Et', ()=>{ pendingAction='move'; toast('Gitmek istediğin bitişik kareye tıkla.'); }, ap<=0);
-    btn('Saldır', ()=>{ pendingAction='attack'; toast('Saldırmak istediğin bitişik düşman karesine tıkla.'); }, ap<=0);
-    if(sel.type!=='tank'){
-      const myShield = ROOM.shields[MY_SLOT];
-      btn('Kalkan Ata (0 AP)', ()=>assignShield(sel.id), myShield.pool<=0 || myShield.usedThisTurn);
-    }
+  if(sel && sel.owner===MY_SLOT && sel.alive && !pendingAction){
+    const myShield = ROOM.shields[MY_SLOT];
+    btn('🛡 Kalkan Ata (0 AP)', ()=>assignShield(sel.id), myShield.pool<=0 || myShield.usedThisTurn);
   }
   const myAir = ROOM.aircraft[MY_SLOT];
-  btn('Keşif (1 AP)', ()=>{ pendingAction='recon'; toast('Keşfedilecek kareye tıkla.'); }, ap<1 || myAir.reconCharges<=0 || myAir.reconCd>0);
-  btn('Bombardıman (1 AP)', ()=>doAirstrike(), ap<1 || myAir.airstrikeCharges<=0 || myAir.airstrikeCd>0);
-  btn('Barikat Etkileşimi', ()=>{ pendingAction='barricade'; toast('Kendi barikatına tıkla.'); }, ap<1);
-  btn('Turu Bitir', ()=>endTurn(), false);
+  btn('💣 Bombardıman (1 AP)', ()=>doAirstrike(), ap<1 || myAir.airstrikeCharges<=0 || myAir.airstrikeCd>0);
+  if(pendingAction==='barricade'){
+    btn('✕ Barikat seçimini iptal et', ()=>{ pendingAction=null; render(); }, false);
+  } else {
+    btn('🧱 Barikat Etkileşimi', ()=>{ pendingAction='barricade'; selectedUnitId=null; render(); toast('Kendi barikatına tıkla.'); }, ap<1);
+  }
+  btn('⏭ Turu Bitir', ()=>endTurn(), false);
+
+  if(pendingBarricadeId){
+    const bar2 = ROOM.barricades.find(b=>b.id===pendingBarricadeId);
+    if(bar2){
+      const wrap = document.createElement('div'); wrap.style.cssText='margin-top:8px;padding-top:8px;border-top:1px solid var(--line);width:100%;';
+      wrap.innerHTML = `<div class="muted" style="margin-bottom:6px;">Barikat seçili — ne yapmak istiyorsun?</div>`;
+      $('actionBar').appendChild(wrap);
+      btn('🔓/🔒 Aç-Kapa', ()=>barricadeAction(bar2,'toggle'), false);
+      btn('🔄 Yön Değiştir', ()=>barricadeAction(bar2,'rotate'), false);
+      btn('➡ Taşı (bitişik kareye tıkla)', ()=>{ pendingAction='moveBarricade'; toast('Barikatın gideceği bitişik kareye tıkla.'); }, false);
+    }
+  }
 }
 
 async function onCellClick(x, y, chainOf){
   const unitHere = ROOM.units.find(u=>u.alive && u.x===x && u.y===y);
-  if(pendingAction===null){
-    if(unitHere && unitHere.owner===MY_SLOT){ selectedUnitId = unitHere.id; render(); }
-    return;
-  }
-  if(!myTurn()){ pendingAction=null; return; }
-  const sel = ROOM.units.find(u=>u.id===selectedUnitId);
+  const key = x+'_'+y;
 
-  if(pendingAction==='move'){
-    if(!sel) return;
-    if(dist(sel,{x,y})!==1){ toast('Sadece bitişik kareye hareket edebilirsin.'); return; }
-    if(occupiedAny(x,y)){ toast('Kare dolu.'); return; }
-    if(blockedByClosedBarricade(x,y,sel.owner)){ toast('Kapalı barikat geçişi engelliyor.'); return; }
-    await spendApAndUpdate({ units: ROOM.units.map(u=>u.id===sel.id?{...u,x,y}:u) });
-    pendingAction=null;
-  }
-  else if(pendingAction==='attack'){
-    if(!sel || !unitHere || unitHere.owner===MY_SLOT){ toast('Geçersiz hedef.'); return; }
-    if(dist(sel,{x,y})!==1){ toast('Sadece bitişik hedefe saldırabilirsin.'); return; }
-    await doAttack(sel, unitHere, chainOf);
-    pendingAction=null;
-  }
-  else if(pendingAction==='recon'){
-    await doRecon(x,y);
-    pendingAction=null;
-  }
-  else if(pendingAction==='barricade'){
+  if(pendingAction==='barricade'){
     const bar = ROOM.barricades.find(b=>b.hp>0 && b.x===x && b.y===y);
-    if(!bar || bar.owner!==MY_SLOT){
-      // düşman barikatına saldırı (AP harcar, zar yok, sabit hasar)
-      const enemyBar = ROOM.barricades.find(b=>b.hp>0 && b.x===x && b.y===y && b.owner!==MY_SLOT);
-      if(enemyBar && sel && dist(sel,{x,y})===1){
-        const newBars = ROOM.barricades.map(b=>b.id===enemyBar.id?{...b,hp:b.hp-2}:b);
-        await spendApAndUpdate({ barricades: newBars }, `Barikat vuruldu (-2 HP).`);
-      } else toast('Kendi barikatına ya da bitişik düşman barikatına tıkla.');
-      pendingAction=null; return;
+    if(bar && bar.owner===MY_SLOT){
+      if(bar.interactedTurn===ROOM.turnNumber){ toast('Bu barikatla bu tur zaten etkileşime girdin.'); return; }
+      pendingBarricadeId = bar.id; pendingAction=null; render(); return;
     }
-    openBarricadeMenu(bar);
-    pendingAction=null;
+    const enemyBar = ROOM.barricades.find(b=>b.hp>0 && b.x===x && b.y===y && b.owner!==MY_SLOT);
+    const sel = ROOM.units.find(u=>u.id===selectedUnitId);
+    if(enemyBar && sel && dist(sel,{x,y})===1){
+      const newBars = ROOM.barricades.map(b=>b.id===enemyBar.id?{...b,hp:b.hp-2}:b);
+      await spendApAndUpdate({ barricades: newBars }, `Barikat vuruldu (-2 HP, zarsız).`);
+    } else toast('Kendi barikatına (seçmek için) ya da bitişik düşman barikatına (vurmak için) tıkla.');
+    pendingAction=null; render(); return;
+  }
+  if(pendingAction==='moveBarricade'){
+    const bar = ROOM.barricades.find(b=>b.id===pendingBarricadeId);
+    if(!bar){ pendingAction=null; return; }
+    if(dist(bar,{x,y})!==1){ toast('Sadece bitişik kareye taşıyabilirsin.'); return; }
+    if(occupiedAny(x,y)){ toast('Kare dolu.'); return; }
+    const newBars = ROOM.barricades.map(b=>b.id===bar.id?{...b,x,y,interactedTurn:ROOM.turnNumber}:b);
+    await spendApAndUpdate({ barricades: newBars }, `Barikat taşındı.`);
+    pendingAction=null; pendingBarricadeId=null; render(); return;
+  }
+
+  if(!pendingAction){
+    if(unitHere && unitHere.owner===MY_SLOT){ selectedUnitId = unitHere.id; pendingBarricadeId=null; render(); return; }
+    const sel = ROOM.units.find(u=>u.id===selectedUnitId);
+    if(sel && sel.owner===MY_SLOT && myTurn()){
+      const { moves, attacks } = computeReachable(sel, chainOf);
+      if(moves.has(key)){
+        await spendApAndUpdate({ units: ROOM.units.map(u=>u.id===sel.id?{...u,x,y}:u) });
+        return;
+      }
+      if(attacks.has(key)){
+        if(x===ROOM.tank.x && y===ROOM.tank.y && ROOM.tank.hp>0){ await doAttackTank(sel); return; }
+        if(unitHere){ await doAttack(sel, unitHere, chainOf); return; }
+      }
+    }
+    selectedUnitId = null; render();
   }
 }
 
 function occupiedAny(x,y){
   return ROOM.units.some(u=>u.alive && u.x===x && u.y===y) || ROOM.barricades.some(b=>b.hp>0 && b.x===x && b.y===y && b.open===false)
-    || (ROOM.tank.x===x && ROOM.tank.y===y) || ROOM.stones.some(s=>s.x===x&&s.y===y);
+    || (ROOM.tank.x===x && ROOM.tank.y===y && ROOM.tank.hp>0) || ROOM.stones.some(s=>s.x===x&&s.y===y);
 }
-function blockedByClosedBarricade(x,y,owner){
+async function showDiceRoll(atkDice, defDice, resultText){
+  const overlay = $('diceOverlay');
+  const rowA = $('diceRowAtk'), rowD = $('diceRowDef');
+  const build = (dice, label)=>{
+    let html = `<span class="lbl">${label}</span>`;
+    dice.forEach(()=> html += `<div class="die rolling">?</div>`);
+    return html;
+  };
+  rowA.innerHTML = atkDice.length ? build(atkDice,'Saldıran') : '';
+  rowD.innerHTML = defDice.length ? build(defDice,'Savunan') : '';
+  $('diceResultText').textContent = '';
+  overlay.classList.remove('hidden');
+  await new Promise(r=>setTimeout(r, 1100));
+  rowA.querySelectorAll('.die').forEach((d,i)=>{ d.classList.remove('rolling'); d.textContent = atkDice[i]; });
+  rowD.querySelectorAll('.die').forEach((d,i)=>{ d.classList.remove('rolling'); d.textContent = defDice[i]; });
+  $('diceResultText').textContent = resultText;
+  await new Promise(r=>setTimeout(r, 1700));
+  overlay.classList.add('hidden');
+}
+
+function blockedByClosedBarricade(x,y){
   const b = ROOM.barricades.find(bb=>bb.hp>0 && bb.x===x && bb.y===y && !bb.open);
   return !!b;
 }
@@ -824,29 +950,60 @@ async function doAttack(attacker, defender, chainOf){
   let units = ROOM.units.slice();
   let shieldsPatch = {};
   let log = `${unitLabel(attacker)}(${attacker.owner}) saldırdı: zarlar ${result.atk.join(',')} vs ${result.def.join(',')}.`;
+  let resultText = '';
 
   if(result.defenderLosses>0){
     if(shielded){
       log += ' Kalkan öldürücü darbeyi engelledi!';
+      resultText = '🛡 Kalkan darbeyi engelledi!';
       shieldsPatch[`shields.${defender.owner}.assignedTo`] = null;
       shieldsPatch[`shields.${defender.owner}.pool`] = Math.max(0, defShield.pool-1);
     } else {
       units = units.map(u=>u.id===defender.id ? {...u, hp: u.hp - result.defenderLosses} : u);
       const dUnit = units.find(u=>u.id===defender.id);
-      if(dUnit.hp<=0){ dUnit.alive=false; log += ` ${defender.owner} birimi öldü.`; }
-      else log += ` ${defender.owner} birimi ${result.defenderLosses} hasar aldı.`;
+      if(dUnit.hp<=0){ dUnit.alive=false; log += ` ${defender.owner} birimi öldü.`; resultText = 'Savunan birim yok edildi!'; }
+      else { log += ` ${defender.owner} birimi ${result.defenderLosses} hasar aldı.`; resultText = `Savunan ${result.defenderLosses} hasar aldı.`; }
     }
-  }
+  } else resultText = 'Saldırı savuşturuldu, savunan tuttu.';
   if(result.attackerLosses>0){
     units = units.map(u=>u.id===attacker.id ? {...u, hp: u.hp - result.attackerLosses} : u);
     const aUnit = units.find(u=>u.id===attacker.id);
-    if(aUnit.hp<=0){ aUnit.alive=false; log += ` ${attacker.owner} saldıran öldü.`; }
+    if(aUnit.hp<=0){ aUnit.alive=false; log += ` ${attacker.owner} saldıran öldü.`; resultText += ' Saldıran da öldü!'; }
   }
+
+  await showDiceRoll(result.atk, result.def, resultText);
 
   const newAp = Math.max(0, ROOM.ap[MY_SLOT]-1);
   const patch = Object.assign({ units, [`ap.${MY_SLOT}`]: newAp, log:[...(ROOM.log||[]), log] }, shieldsPatch);
   await updateDoc(roomRef(ROOM_CODE), patch);
+  selectedUnitId = null;
   checkVictory(units);
+}
+
+async function doAttackTank(attacker){
+  const tank = ROOM.tank;
+  if(tank.owner===attacker.owner){ toast('Kendi tankına saldıramazsın.'); return; }
+  const attackerCtx = { chainLinked:false, adjacentAllies:0 };
+  const defenderCtx = { chainLinked:false, hasBonus:true }; // tank her zaman 2 zarla savunur, güçlü nötr birim
+  const result = resolveCombat(attackerCtx, defenderCtx);
+  let newTank = {...tank, hp: Math.max(0, tank.hp - result.defenderLosses)};
+  let units = ROOM.units.slice();
+  let log = `${unitLabel(attacker)}(${attacker.owner}) tanka saldırdı: zarlar ${result.atk.join(',')} vs ${result.def.join(',')}.`;
+  let resultText = '';
+  if(newTank.hp<=0){ log += ' Tank yok edildi!'; resultText='Tank yok edildi!'; newTank = {...newTank, owner:null, adjTurnsP1:0, adjTurnsP2:0}; }
+  else resultText = `Tank ${result.defenderLosses} hasar aldı (HP ${newTank.hp}).`;
+  if(result.attackerLosses>0){
+    units = units.map(u=>u.id===attacker.id ? {...u, hp: u.hp - result.attackerLosses} : u);
+    const aUnit = units.find(u=>u.id===attacker.id);
+    if(aUnit.hp<=0){ aUnit.alive=false; log += ` ${attacker.owner} saldıran öldü.`; resultText += ' Saldıran da öldü!'; }
+  }
+  await showDiceRoll(result.atk, result.def, resultText);
+  await updateDoc(roomRef(ROOM_CODE), {
+    tank: newTank, units,
+    [`ap.${MY_SLOT}`]: Math.max(0, ROOM.ap[MY_SLOT]-1),
+    log: [...(ROOM.log||[]), log],
+  });
+  selectedUnitId = null;
 }
 
 async function assignShield(unitId){
@@ -859,41 +1016,33 @@ async function assignShield(unitId){
   toast('Kalkan atandı (rakip göremez).');
 }
 
-async function doRecon(x,y){
-  const cfg = ROOM.config;
-  const air = ROOM.aircraft[MY_SLOT];
-  const reveal = { owner: MY_SLOT, x, y, radius: cfg.reconRadius, expiresTurn: ROOM.turnNumber + cfg.reconDuration };
-  await spendApAndUpdate({
-    reveals: [...(ROOM.reveals||[]), reveal],
-    [`aircraft.${MY_SLOT}.reconCharges`]: air.reconCharges-1,
-    [`aircraft.${MY_SLOT}.reconCd`]: cfg.reconCooldown,
-  }, `${MY_SLOT} keşif yaptı.`);
-}
-
 async function doAirstrike(){
   const cfg = ROOM.config;
   const air = ROOM.aircraft[MY_SLOT];
   if(ROOM.ap[MY_SLOT]<1 || air.airstrikeCharges<=0 || air.airstrikeCd>0) return;
   const roll = rollDie();
+  await showDiceRoll([roll], [], '');
   let units = ROOM.units.slice();
   let log = `${MY_SLOT} bombardıman zarı: ${roll}.`;
+  let resultText = '';
   if(roll>=4){
     const targets = ROOM.units.filter(u=>u.alive && u.owner!==MY_SLOT && u.type!=='commander');
-    if(targets.length===0){ log += ' Hedef yok.'; }
+    if(targets.length===0){ log += ' Hedef yok.'; resultText='Hedef bulunamadı.'; }
     else {
       const killCount = roll===6 ? 2 : 1;
       const shuffled = targets.sort(()=>Math.random()-0.5).slice(0,killCount);
       shuffled.forEach(t=>{
         const shield = ROOM.shields[t.owner];
         if(shield.assignedTo===t.id){
-          log += ` Kalkan ${unitLabel(t)} birimini korudu!`;
+          log += ` Kalkan ${unitLabel(t)} birimini korudu!`; resultText += '🛡 Kalkan korudu! ';
         } else {
           units = units.map(u=>u.id===t.id?{...u, hp:0, alive:false}:u);
-          log += ` ${unitLabel(t)} (${t.owner}) yok edildi.`;
+          log += ` ${unitLabel(t)} (${t.owner}) yok edildi.`; resultText += `${unitLabel(t)} yok edildi! `;
         }
       });
     }
-  } else { log += ' Saldırı etkisiz.'; }
+  } else { log += ' Saldırı etkisiz.'; resultText = 'Bombardıman etkisiz oldu.'; }
+  $('diceResultText').textContent = resultText;
   await updateDoc(roomRef(ROOM_CODE), {
     units,
     [`ap.${MY_SLOT}`]: Math.max(0, ROOM.ap[MY_SLOT]-1),
@@ -904,16 +1053,17 @@ async function doAirstrike(){
   checkVictory(units);
 }
 
-function openBarricadeMenu(bar){
+async function barricadeAction(bar, kind){
+  if(bar.interactedTurn===ROOM.turnNumber){ toast('Bu barikatla bu tur zaten etkileşime girdin.'); pendingBarricadeId=null; render(); return; }
   const dirs = ['N','E','S','W'];
   const nextDir = dirs[(dirs.indexOf(bar.dir)+1)%4];
-  const choice = confirm(`Barikat: TAMAM = Aç/Kapa değiştir, İPTAL = Yön değiştir (${bar.dir}→${nextDir})`);
-  const cfg = ROOM.config;
   const newBars = ROOM.barricades.map(b=>{
     if(b.id!==bar.id) return b;
-    return choice ? {...b, open: !b.open} : {...b, dir: nextDir};
+    if(kind==='toggle') return {...b, open: !b.open, interactedTurn: ROOM.turnNumber};
+    return {...b, dir: nextDir, interactedTurn: ROOM.turnNumber};
   });
-  spendApAndUpdate({ barricades: newBars }, `Barikat güncellendi.`);
+  await spendApAndUpdate({ barricades: newBars }, kind==='toggle' ? 'Barikat açıldı/kapandı.' : `Barikat yönü değişti (${nextDir}).`);
+  pendingBarricadeId = null;
 }
 
 async function endTurn(){
@@ -936,7 +1086,7 @@ async function endTurn(){
 
   // cooldown ticks
   const air = JSON.parse(JSON.stringify(ROOM.aircraft));
-  ['p1','p2'].forEach(p=>{ air[p].reconCd = Math.max(0, air[p].reconCd-1); air[p].airstrikeCd = Math.max(0, air[p].airstrikeCd-1); });
+  ['p1','p2'].forEach(p=>{ air[p].airstrikeCd = Math.max(0, air[p].airstrikeCd-1); });
 
   const turnNumber = ROOM.currentTurn==='p2' ? ROOM.turnNumber+1 : ROOM.turnNumber;
 
@@ -949,7 +1099,7 @@ async function endTurn(){
     tank, aircraft: air,
     log: [...(ROOM.log||[]), `Tur ${nextOwner}'a geçti.`],
   });
-  selectedUnitId = null; pendingAction=null;
+  selectedUnitId = null; pendingAction=null; pendingBarricadeId=null;
 
   if(turnNumber > cfg.maxTurns){
     await finishByScore();
